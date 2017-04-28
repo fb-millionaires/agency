@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 DETAIL = 'DETAIL'
 OFFICES = 'OFFICES'
 SERVICES = 'SERVICES'

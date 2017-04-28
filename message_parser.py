@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import copy
 
 import constants
@@ -5,7 +6,7 @@ import message_templates
 import utils
 
 
-def prepare_agencies_list_elements(agencies):
+def prepare_agencies_list_elements():
     """Creates valid generic template elements for each agency in db"""
     elements = []
     agency_to_element_field_mapping = {
@@ -13,6 +14,7 @@ def prepare_agencies_list_elements(agencies):
         'image_url': 'logo',
         'subtitle': 'name',
     }
+    agencies = utils.get_agencies_from_db()
     for agency in agencies:
         element = copy.deepcopy(message_templates.ELEMENT_TEMPLATE)
         for element_field, agency_field in agency_to_element_field_mapping.iteritems():
@@ -163,12 +165,21 @@ def get_contact(recipient_id, agency):
     """Return the contact information of an agency"""
     template = []
     for key, value in agency[constants.CONTACT.lower()].iteritems():
-        str_values = ', '.join(value)
-        message_text = '{key}:\n {values}'.format(key=key, values=str_values)
-        template.append(prepare_text_message(recipient_id, message_text))
+        if value:
+            str_values = ', '.join(value)
+            message_text = '{key}:\n {values}'.format(
+                key=key, values=str_values)
+            template.append(prepare_text_message(recipient_id, message_text))
 
-    end_message = ('Remember the menu below could be used to quickly '
-                   'head to the start menu')
+    # aplogize if we found nothing
+    if template:
+        template.append(
+            "Sorry, I don't have contact details for {0}".format(
+                agency['name'])
+        )
+    else:
+        end_message = ('Remember the menu below could be used to quickly '
+                       'head to the start menu')
     template.append(prepare_text_message(recipient_id, end_message))
     return template
 
@@ -203,7 +214,7 @@ def get_offices_response_text(offices):
             'Duration: {duration}\n'
         ).format(
             index=index + 1,
-            address=office['address'][0],
+            address=office['address'],
             distance=office['distance'],
             duration=office['duration']
         )

@@ -1,14 +1,29 @@
-import agencies
-import constants
+# -*- coding: utf-8 -*-
+import os
 
 import googlemaps
+from pymongo import MongoClient
+
+import constants
 
 
-def get_agency(agency_name):
-    agency = {}
-    for each in agencies.AGENCIES:
-        if each['name'].lower() == agency_name.lower():
-            agency = each
+def connect():
+    """Substitute the 5 pieces of information you got when creating
+    the Mongo DB Database (underlined in red in the screenshots)
+    """
+    # REMEMBER TO SAVE USERNAME AND PASSWORD IN AN ENVIRONMENT VARIABLE
+    connection = MongoClient(os.environ['DB_HOST'], int(os.environ['DB_PORT']))
+    handle = connection[os.environ['DB_NAME']]
+    handle.authenticate(os.environ['DB_USER'], os.environ['DB_PASSWORD'])
+    return handle
+
+
+handle = connect()
+
+
+def get_one_agency_from_db(agency_name):
+    agency_table = handle.agencies
+    agency = agency_table.find_one({'name': agency_name})
     return agency
 
 
@@ -54,11 +69,12 @@ def get_closest_offices(origin_location, agency_name):
         - Get the average of the list
         - Return only offices less or equal to that average
     """
-    agency = [agency for agency in agencies.AGENCIES if agency['name'].lower() == agency_name.lower()][0]
+    agency = get_one_agency_from_db(agency_name)
     offices = agency.get(constants.OFFICES.lower())
-
-    gmaps = googlemaps.Client(key='AIzaSyCt7JdcEzFU14DcDEEY6edTZXoz0qbA8Ws')
-    office_locations = [office['location'] for office in offices]
+    gmaps = googlemaps.Client(key=os.environ['GOOGLE_CLIENT_KEY'])
+    office_locations = [
+        office['location'] for office in offices if office['location']['lat'] != '' or office['location']['lng'] != ''
+    ]
     distance_matrix = gmaps.distance_matrix(
         origins=origin_location,
         destinations=office_locations,
@@ -67,7 +83,9 @@ def get_closest_offices(origin_location, agency_name):
 
     # get values of duration for each route
     rows = distance_matrix['rows'][0]['elements']
-    duration = [row['duration']['value'] for row in rows if row['status'] == 'OK']
+    duration = [
+        row['duration']['value'] for row in rows if row['status'] == 'OK'
+    ]
 
     average = sum(duration) / len(duration)
 
@@ -77,13 +95,14 @@ def get_closest_offices(origin_location, agency_name):
         if row['status'] == 'OK':
             if row['duration']['value'] <= average:
                 temp = {
-                    'address': distance_matrix['destination_addresses'],
+                    'address': distance_matrix['destination_addresses'][count],
                     'distance': row['distance']['text'],
                     'duration': row['duration']['text']
                 }
-            else:
-                break
-        result.append(temp)
+                result.append(temp)
+
+    if not result:
+        result.append('Sorry, I found nothing.')
 
     return result
 
@@ -148,9 +167,19 @@ def get_service_requests_start_message(query, agency_name, service_type):
         'requirements': (
             'The {agency_name} requires the following items '
             'for {service_type}'.format(
-                agency_name=agency_name,
+                agency_name=agency_name.title(),
                 service_type=service_type
             )
         )
     }
     return service_items_to_start_message_mapping[query]
+
+
+def get_agencies_from_db():
+    """Call db for fields: short_name, logo, name"""
+    agency_doc = handle.agencies
+    agencies = agency_doc.find(
+        {},
+        {'short_name': 1, 'logo': 1, 'name': 1, '_id': 0}
+    )
+    return agencies

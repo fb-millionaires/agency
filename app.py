@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import json
 import os
 import sys
@@ -6,7 +7,6 @@ from flask import Flask, jsonify, request
 from pymongo import MongoClient
 import requests
 
-import agencies
 import constants
 import message_parser
 import utils
@@ -68,17 +68,17 @@ def webhook():
 
                     if message_type is 'coordinates':
                         response_template = message_parser.prepare_text_message(
-                            sender_id, 'Here is what I found:')
+                            sender_id, 'Let me see if we have records for that:')
                         send_message(sender_id, response_template)
 
                         # query db for the latest location request attached
                         # to current recipient id
                         lrh_table = handle.location_request_history
                         agency = lrh_table.find(
-                            {'recipient_id': sender_id},
+                            {'sender_id': sender_id},
                             {'agency_name': 1, '_id': 0}
                         ).sort([('_id', -1)]).limit(1)
-                        agency_name = agency.next().get('agency_name')
+                        agency_name = agency.next().get('agency_name').lower()
 
                         location = payload
                         offices = utils.get_closest_offices(
@@ -127,8 +127,7 @@ def webhook():
                         # get specific fields from database
                         # agencies = query to db
                         template_elements = (
-                            message_parser.prepare_agencies_list_elements(
-                                agencies.AGENCIES)
+                            message_parser.prepare_agencies_list_elements()
                         )
                         template = message_parser.create_agencies_list_template(
                             sender_id, template_elements)
@@ -144,7 +143,7 @@ def webhook():
                             for section in template:
                                 send_message(sender_id, section)
                         elif postback_components['prefix'] == 'SERVICE':
-                            print postback_components
+                            log(postback_components)
                             template = handle_service_level_requests(
                                 sender_id, postback_components)
                             for section in template:
@@ -163,7 +162,7 @@ def handle_agency_level_requests(sender_id, postback_components):
     """
     template = []
     agency_name = postback_components['search_param1'].replace('_', ' ')
-    agency = utils.get_agency(agency_name)
+    agency = utils.get_one_agency_from_db(agency_name.lower())
     if not agency:
         message_text = "Oops, sorry we don't have a record for that agency"
         return message_parser.prepare_text_message(sender_id, message_text)
@@ -208,13 +207,12 @@ def handle_service_level_requests(sender_id, postback_components):
     query = postback_components['search_param2'].lower()
 
     # get agency
-    agency_name = postback_components['suffix'].replace('_', ' ')
-    agency = utils.get_agency(agency_name)
+    agency_name = postback_components['suffix'].replace('_', ' ').lower()
+    agency = utils.get_one_agency_from_db(agency_name)
     # get info: for db that would be query agency table for an agency with
     # a particular service and name of service
     # for now
     # get service
-    import ipdb; ipdb.set_trace()
     service = utils.get_specific_service(agency['services'], service_type)
     result = service[query]
 

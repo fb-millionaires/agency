@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # list of agencies
 # list of agency services
 # response proper
