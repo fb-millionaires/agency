@@ -26,7 +26,9 @@ pyparsing==2.2.0
 requests==2.11.1
 scandir==1.5
 simplegeneric==0.8.1
+simplejson==3.10.0
 six==1.10.0
 traitlets==4.3.2
 wcwidth==0.1.7
 Werkzeug==0.12.1
+wit==4.2.0
