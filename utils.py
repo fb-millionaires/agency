@@ -1,10 +1,16 @@
 # -*- coding: utf-8 -*-
+import copy
 import os
+import random
 
 import googlemaps
 from pymongo import MongoClient
+from wit import Wit
 
+import app
 import constants
+import message_parser
+import message_templates
 
 
 def connect():
@@ -101,9 +107,6 @@ def get_closest_offices(origin_location, agency_name):
                 }
                 result.append(temp)
 
-    if not result:
-        result.append('Sorry, I found nothing.')
-
     return result
 
 
@@ -183,3 +186,71 @@ def get_agencies_from_db():
         {'short_name': 1, 'logo': 1, 'name': 1, '_id': 0}
     )
     return agencies
+
+
+def get_agency_name_from_local_history(sender_id):
+    """query db for the latest location request attached
+    to current recipient id
+    """
+    lrh_table = handle.location_request_history
+    rows = lrh_table.find(
+        {'sender_id': sender_id},
+        {'agency_name': 1, '_id': 0}
+    ).sort([('_id', -1)]).limit(1)
+    agency_name = rows.next().get('agency_name').lower()
+    return agency_name
+
+
+def get_wit_instance():
+    """Returns a Wit instance"""
+    def send(request, response):
+        print('Sending to user...', response['text'])
+
+    def my_action(request):
+        print('Received from user...', request['text'])
+
+    actions = {
+        'send': send,
+        'my_action': my_action,
+    }
+
+    client = Wit(access_token=os.environ['WIT_AI_ACCESS_TOKEN'],
+                 actions=actions)
+    return client
+
+
+def process_text_through_wit_ai(message_text):
+    """Sends message to wit ai.
+    Returns the postback gotten from wit.ai
+    """
+    client = get_wit_instance()
+    response = client.message(message_text)
+    if ('intent' in response['entities'] and
+            response['entities']['intent'][0]['value'] > 0.7):
+        payload = response['entities']['intent'][0]['value']
+    else:
+        payload = ''
+    return payload
+
+
+def handle_postback(sender_id, postback_components):
+    """Calls the appropriate template generator to handle postback"""
+    if postback_components.get('prefix') == 'AGENCY':
+        template = app.handle_agency_level_requests(
+            sender_id, postback_components)
+    else:
+        apology = random.choice(constants.APOLOGIES)
+        follow_up = random.choice(constants.FOLLOW_UP)
+        template = [
+            message_parser.prepare_text_message(sender_id, apology),
+            message_parser.prepare_text_message(sender_id, follow_up)
+        ]
+
+    return template
+
+
+def get_hint_element():
+    """Fills the hint template with a random background image and returns"""
+    element = copy.deepcopy(message_templates.AGENCY_LIST_TEMPLATE_HINT)
+    element['image_url'] = random.choice(constants.HINT_ELEMENT_PICTURES)
+    return element

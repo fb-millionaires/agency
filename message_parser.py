@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import copy
 
+import app
 import constants
 import message_templates
 import utils
@@ -39,7 +40,7 @@ def create_agencies_list_template(recipient_id, elements):
     template = copy.deepcopy(message_templates.LIST_TEMPLATE)
     template['recipient']['id'] = recipient_id
     template['message']['attachment']['payload']['template_type'] = 'generic'
-    elements.append(message_templates.AGENCY_LIST_TEMPLATE_HINT)
+    elements.append(utils.get_hint_element())
     template['message']['attachment']['payload']['elements'] = elements
     return template
 
@@ -180,7 +181,7 @@ def get_contact(recipient_id, agency):
     else:
         end_message = ('Remember the menu below could be used to quickly '
                        'head to the start menu')
-    template.append(prepare_text_message(recipient_id, end_message))
+        template.append(prepare_text_message(recipient_id, end_message))
     return template
 
 
@@ -233,3 +234,39 @@ def prepare_text_message(recipient_id, message_text):
         }
     }
     return message
+
+
+def text_parser(sender_id, message):
+    """
+    Decode text messages and returns appropriate response in template form
+    """
+    response_template = []
+
+    message_type, payload = utils.get_type_and_target_payload(message)
+
+    if message_type is 'coordinates':
+        loading_response_template = prepare_text_message(
+            sender_id, 'Give me a moment, let me search')
+        app.send_message(sender_id, loading_response_template)
+
+        agency_name = utils.get_agency_name_from_local_history(sender_id)
+
+        location = payload
+        offices = utils.get_closest_offices(location, agency_name)
+        response_texts = get_offices_response_text(offices)
+        intro_text = 'So here is what I found'
+        response_template.append(prepare_text_message(sender_id, intro_text))
+        for response_text in response_texts:
+            response_template.append(
+                prepare_text_message(sender_id, response_text))
+
+    elif message_type is 'text':
+        postback = utils.process_text_through_wit_ai(payload)
+        if postback:
+            postback_components = utils.deconstruct_postback(postback)
+        else:
+            postback_components = {}
+        response_template = utils.handle_postback(
+            sender_id, postback_components)
+
+    return response_template

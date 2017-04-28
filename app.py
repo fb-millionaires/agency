@@ -56,50 +56,19 @@ def webhook():
     if data['object'] == 'page':
         for entry in data['entry']:
             for messaging_event in entry['messaging']:
+                # the facebook ID of the person sending you the message
+                sender_id = messaging_event['sender']['id']
+
+                # the recipient's ID, actually Agency's page facebook ID
+                # recipient_id = messaging_event['recipient']['id']
+
                 # someone sent us a message
-                if messaging_event.get('message'):
-                    # the facebook ID of the person sending you the message
-                    sender_id = messaging_event['sender']['id']
-                    # the recipient's ID, actually Agency's page facebook ID
-                    recipient_id = messaging_event['recipient']['id']
+                if 'message' in messaging_event:
+                    message = messaging_event.get('message')
+                    template = message_parser.text_parser(sender_id, message)
 
-                    message_type, payload = utils.get_type_and_target_payload(
-                        messaging_event['message'])
-
-                    if message_type is 'coordinates':
-                        response_template = message_parser.prepare_text_message(
-                            sender_id, 'Let me see if we have records for that:')
-                        send_message(sender_id, response_template)
-
-                        # query db for the latest location request attached
-                        # to current recipient id
-                        lrh_table = handle.location_request_history
-                        agency = lrh_table.find(
-                            {'sender_id': sender_id},
-                            {'agency_name': 1, '_id': 0}
-                        ).sort([('_id', -1)]).limit(1)
-                        agency_name = agency.next().get('agency_name').lower()
-
-                        location = payload
-                        offices = utils.get_closest_offices(
-                            location, agency_name)
-                        response_texts = message_parser.get_offices_response_text(
-                            offices)
-                        for response_text in response_texts:
-                            response_template = message_parser.prepare_text_message(
-                                sender_id, response_text)
-                            send_message(sender_id, response_template)
-
-                    elif message_type is 'text':
-                        request_text = payload
-                        response_text = (
-                            'Got it!!! -- {original_message}'.format(
-                                original_message=request_text
-                            )
-                        )
-                        response_template = message_parser.prepare_text_message(
-                            sender_id, response_text)
-                        send_message(sender_id, response_template)
+                    for packet in template:
+                        send_message(sender_id, packet)
 
                 # delivery confirmation
                 if messaging_event.get('delivery'):
@@ -113,8 +82,6 @@ def webhook():
                 if messaging_event.get('postback'):
                     # send typing indicator to acknowledge receipt while we
                     # process
-                    # the facebook ID of the person sending you the message
-                    sender_id = messaging_event['sender']['id']
                     payload = messaging_event.get('postback').get('payload')
 
                     if (payload == 'GET_STARTED_PAYLOAD'):
@@ -165,7 +132,9 @@ def handle_agency_level_requests(sender_id, postback_components):
     agency = utils.get_one_agency_from_db(agency_name.lower())
     if not agency:
         message_text = "Oops, sorry we don't have a record for that agency"
-        return message_parser.prepare_text_message(sender_id, message_text)
+        template.append(
+            message_parser.prepare_text_message(sender_id, message_text))
+        return template
 
     if postback_components['suffix'] == constants.DETAIL:
         template = message_parser.get_agency_detail(sender_id, agency)

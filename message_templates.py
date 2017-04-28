@@ -37,7 +37,7 @@ ELEMENT_TEMPLATE = {
 AGENCY_LIST_TEMPLATE_HINT = {
     'title': ('Hint: Use your keyboard to type short '
               'queries for quick results.'),
-    'image_url': 'http://res.cloudinary.com/andela-troupon/image/upload/v1493046894/img_53_km77oc.jpg',
+    'image_url': '',
     'subtitle': ('For example, type: renew international passport. '
                  'Remember you can always access this view by tapping the '
                  'menu below. Enjoy!')
