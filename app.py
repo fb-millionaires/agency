@@ -3,28 +3,15 @@ import json
 import os
 import sys
 
-from flask import Flask, jsonify, request
-from pymongo import MongoClient
+from flask import Flask, request
 import requests
 
 import constants
-import message_parser
+import message_constructor
 import utils
 
 
-def connect():
-    """Substitute the 5 pieces of information you got when creating
-    the Mongo DB Database (underlined in red in the screenshots)
-    """
-    # REMEMBER TO SAVE USERNAME AND PASSWORD IN AN ENVIRONMENT VARIABLE
-    connection = MongoClient('ds143030.mlab.com', 43030)
-    handle = connection['agency']
-    handle.authenticate('agency_user', 'notsecret')
-    return handle
-
-
 app = Flask(__name__)
-handle = connect()
 
 
 @app.route('/', methods=['GET'])
@@ -64,11 +51,7 @@ def webhook():
 
                 # someone sent us a message
                 if 'message' in messaging_event:
-                    message = messaging_event.get('message')
-                    template = message_parser.text_parser(sender_id, message)
-
-                    for packet in template:
-                        send_message(sender_id, packet)
+                    handle_text_messages(messaging_event, sender_id)
 
                 # delivery confirmation
                 if messaging_event.get('delivery'):
@@ -80,42 +63,58 @@ def webhook():
 
                 # user clicked/tapped 'postback' button in earlier message
                 if messaging_event.get('postback'):
-                    # send typing indicator to acknowledge receipt while we
-                    # process
-                    payload = messaging_event.get('postback').get('payload')
-
-                    if (payload == 'GET_STARTED_PAYLOAD'):
-                        message = message_parser.prepare_text_message(
-                            sender_id,
-                            'Here are a list of government agencies we '
-                            'provide services for:'
-                        )
-                        send_message(sender_id, message)
-                        # get specific fields from database
-                        # agencies = query to db
-                        template_elements = (
-                            message_parser.prepare_agencies_list_elements()
-                        )
-                        template = message_parser.create_agencies_list_template(
-                            sender_id, template_elements)
-                        send_message(sender_id, template)
-                    else:
-                        postback_components = utils.deconstruct_postback(
-                            payload)
-                        # the first index indicates level (i.e. Agency or Service)
-                        # the last indicates what information
-                        if postback_components['prefix'] == 'AGENCY':
-                            template = handle_agency_level_requests(
-                                sender_id, postback_components)
-                            for section in template:
-                                send_message(sender_id, section)
-                        elif postback_components['prefix'] == 'SERVICE':
-                            log(postback_components)
-                            template = handle_service_level_requests(
-                                sender_id, postback_components)
-                            for section in template:
-                                send_message(sender_id, section)
+                    handle_postback(messaging_event)
     return 'ok', 200
+
+
+def handle_text_messages(messaging_event, sender_id):
+    """
+    Interpretes and responds to text messages
+    """
+    message = messaging_event.get('message')
+    template = message_constructor.text_parser(sender_id, message)
+
+    for packet in template:
+        send_message(sender_id, packet)
+
+
+def handle_postback(messaging_event, sender_id):
+    """
+    Destructures postback and calls the appropriate handler
+    """
+    # send typing indicator to acknowledge receipt while we
+    # process
+    payload = messaging_event.get('postback').get('payload')
+
+    if (payload == 'GET_STARTED_PAYLOAD'):
+        message = message_constructor.prepare_text_message(
+            sender_id,
+            'Here is a list of government agencies we '
+            'provide services for:'
+        )
+        send_message(sender_id, message)
+        template = message_constructor.create_generic_list_template(
+            sender_id,
+            message_constructor.prepare_agencies_list_elements()
+        )
+        send_message(sender_id, template)
+    else:
+        postback_components = utils.deconstruct_postback(
+            payload)
+        # the first index indicates level
+        # (i.e. Agency or Service)
+        # the last indicates what information
+        if postback_components['prefix'] == 'AGENCY':
+            template = handle_agency_level_requests(
+                sender_id, postback_components)
+            for section in template:
+                send_message(sender_id, section)
+        elif postback_components['prefix'] == 'SERVICE':
+            log(postback_components)
+            template = handle_service_level_requests(
+                sender_id, postback_components)
+            for section in template:
+                send_message(sender_id, section)
 
 
 def handle_agency_level_requests(sender_id, postback_components):
@@ -133,26 +132,26 @@ def handle_agency_level_requests(sender_id, postback_components):
     if not agency:
         message_text = "Oops, sorry we don't have a record for that agency"
         template.append(
-            message_parser.prepare_text_message(sender_id, message_text))
+            message_constructor.prepare_text_message(sender_id, message_text))
         return template
 
     if postback_components['suffix'] == constants.DETAIL:
-        template = message_parser.get_agency_detail(sender_id, agency)
+        template = message_constructor.get_agency_detail(sender_id, agency)
     elif postback_components['suffix'] == constants.OFFICES:
-        template = message_parser.get_show_location_template(
+        template = message_constructor.get_show_location_template(
             sender_id, agency)
         # save to db a show_location to sender_id link
-        lrh_table = handle.location_request_history
+        lrh_table = utils.handle.location_request_history
         data = {
             'sender_id': sender_id,
             'agency_name': agency_name
         }
         lrh_table.insert_one(data)
     elif postback_components['suffix'] == constants.CONTACT:
-        template = message_parser.get_contact(sender_id, agency)
+        template = message_constructor.get_contact(sender_id, agency)
     elif postback_components['suffix'] == constants.SERVICES:
         service_name = postback_components['search_param2']
-        template = message_parser.get_service_detail_view(
+        template = message_constructor.get_service_detail_view(
             sender_id, agency, service_name)
     return template
 
@@ -214,7 +213,7 @@ def handle_service_level_requests(sender_id, postback_components):
     template = []
     for message_text in message_texts:
         template.append(
-            message_parser.prepare_text_message(sender_id, message_text))
+            message_constructor.prepare_text_message(sender_id, message_text))
 
     return template
 
@@ -252,14 +251,6 @@ def log(message):
     """Simple wrapper for loggin to stdout on heroku"""
     print str(message)
     sys.stdout.flush()
-
-
-def home_page():
-    test_data = [x for x in handle.tests.find(
-        {},
-        {"name": True, "content": True, "_id": False, "requirements": True}
-    )]
-    return jsonify(results=test_data)
 
 
 def decode_message(message):

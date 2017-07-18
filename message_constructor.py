@@ -35,7 +35,7 @@ def prepare_agencies_list_elements():
     return elements
 
 
-def create_agencies_list_template(recipient_id, elements):
+def create_generic_list_template(recipient_id, elements):
     """Returns a template with supplied elements attached"""
     template = copy.deepcopy(message_templates.LIST_TEMPLATE)
     template['recipient']['id'] = recipient_id
@@ -81,7 +81,7 @@ def get_agency_detail(recipient_id, agency):
 
         elements.append(element)
 
-    # get closest office
+    # construct closest office element and button
     element = copy.deepcopy(message_templates.ELEMENT_TEMPLATE)
     element['title'] = 'Get the closest offices to your location'
     element['image_url'] = constants.DEFAULT_BUILDING_IMG
@@ -95,7 +95,7 @@ def get_agency_detail(recipient_id, agency):
     element['buttons'].append(button)
     elements.append(element)
 
-    # get contact
+    # construct contact element and button
     element = copy.deepcopy(message_templates.ELEMENT_TEMPLATE)
     element['title'] = 'Contact Us'
     element['image_url'] = constants.CONTACT_IMAGE
@@ -109,7 +109,7 @@ def get_agency_detail(recipient_id, agency):
     element['buttons'].append(button)
     elements.append(element)
 
-    # get website
+    # construct website button link
     button = copy.deepcopy(message_templates.BUTTON_TEMPLATE)
     button['type'] = 'web_url'
     button['title'] = 'View Website'
@@ -262,10 +262,9 @@ def text_parser(sender_id, message):
 
     elif message_type is 'text':
         postback = utils.process_text_through_wit_ai(payload)
+        postback_components = {}
         if postback:
             postback_components = utils.deconstruct_postback(postback)
-        else:
-            postback_components = {}
         response_template = utils.handle_postback(
             sender_id, postback_components)
 

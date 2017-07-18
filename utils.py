@@ -9,7 +9,7 @@ from wit import Wit
 
 import app
 import constants
-import message_parser
+import message_constructor
 import message_templates
 
 
@@ -79,7 +79,8 @@ def get_closest_offices(origin_location, agency_name):
     offices = agency.get(constants.OFFICES.lower())
     gmaps = googlemaps.Client(key=os.environ['GOOGLE_CLIENT_KEY'])
     office_locations = [
-        office['location'] for office in offices if office['location']['lat'] != '' or office['location']['lng'] != ''
+        office['location'] for office in offices
+        if office['location']['lat'] != '' or office['location']['lng'] != ''
     ]
     distance_matrix = gmaps.distance_matrix(
         origins=origin_location,
@@ -242,8 +243,8 @@ def handle_postback(sender_id, postback_components):
         apology = random.choice(constants.APOLOGIES)
         follow_up = random.choice(constants.FOLLOW_UP)
         template = [
-            message_parser.prepare_text_message(sender_id, apology),
-            message_parser.prepare_text_message(sender_id, follow_up)
+            message_constructor.prepare_text_message(sender_id, apology),
+            message_constructor.prepare_text_message(sender_id, follow_up)
         ]
 
     return template
